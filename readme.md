@@ -4,7 +4,7 @@ Inspired by [ringo-hibernate](https://github.com/robi42/ringo-hibernate) package
 
 ##Requirements
 
-* [Lo-Dash](http://lodash.com/) - *"A drop-in replacement for [Underscore.js] , from the devs behind http://jsPerf.com/"*
+* [Lo-Dash](http://lodash.com/) - *"A drop-in replacement for [Underscore.js] , from the devs behind [jsPerf.com](http://jsPerf.com/)"*
 * or [Underscore.js](http://underscorejs.org/) - *"A utility-belt library for JavaScript that provides a lot of the functional programming support"*
 
 
