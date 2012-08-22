@@ -2,7 +2,7 @@ This is the JavaScript wrapper for the popular Java ORM library [Hibernate](http
 
 ##Requirements
 
-[Lo-Dash](http://lodash.com/) saved as "underscore.js" or [Underscore.js](http://underscorejs.org/) itself.
+[Lo-Dash](http://lodash.com/)
 
 ##Examples
 
