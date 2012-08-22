@@ -1,0 +1,3 @@
+[submodule "contrib/lodash"]
+	path = contrib/lodash
+	url = https://github.com/bestiejs/lodash
