@@ -1,4 +1,4 @@
-load('underscore.js');
+load('contrib/lodash/lodash.js');
 
 function deflt(v, d) {
   return (_.isNull(v) || _.isUndefined(v)) ? d : v;
