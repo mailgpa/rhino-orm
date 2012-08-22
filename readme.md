@@ -22,3 +22,11 @@ orm = new ORM({
   resources: ['mappings.hbm.xml']
 });
 ```
+
+##License and Contact
+
+**License:** MIT (http://www.opensource.org/licenses/mit-license.php)
+
+Pavel Goloborodko<br>
+https://github.com/mailgpa<br>
+mailgpa@gmail.com
