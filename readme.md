@@ -17,6 +17,7 @@ load('lodash.js');
 
 var ORM = require('orm'),
 orm = new ORM({
+  // Hibernate configuration options
   config: {
     "hibernate.connection.driver_class": "org.h2.Driver",
     "hibernate.connection.url": "jdbc:h2:db/test;AUTO_SERVER=TRUE",
@@ -25,6 +26,7 @@ orm = new ORM({
     "hibernate.show_sql": "true",
     "hibernate.hbm2ddl.auto": "update",
   },
+  // HBM mappings from CLASSPATH
   resources: ['mappings.hbm.xml']
 });
 ```
