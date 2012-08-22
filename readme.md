@@ -1,4 +1,4 @@
-The quick and ditry JavaScript wrapper for the popular Java ORM library [Hibernate] to be used in [Rhino] scripts.
+The *quick and ditry* JavaScript wrapper for the popular Java ORM library [Hibernate] to be used in [Rhino] scripts.
 
 Inspired by [ringo-hibernate](https://github.com/robi42/ringo-hibernate) package for [RingoJS](http://ringojs.org/)
 
