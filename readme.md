@@ -1,5 +1,9 @@
 This as the JavaScript wrapper for the popular Java ORM library [Hibernate](http://hibernate.org/) to be used in [Rhino](https://developer.mozilla.org/en-US/docs/Rhino) scripts.
 
+##Requirements
+
+[Lo-Dash](http://lodash.com/) saved as "underscore.js" or [Underscore.js](http://underscorejs.org/) itself.
+
 ##Examples
 
 ```javascript
