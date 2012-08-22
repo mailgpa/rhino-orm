@@ -5,11 +5,14 @@ This as the JavaScript wrapper for the popular Java ORM library [Hibernate](http
 ```javascript
 var ORM = require('orm'),
 orm = new ORM({
-  "hibernate.connection.driver_class": "org.h2.Driver",
-  "hibernate.connection.url": "jdbc:h2:db/test;AUTO_SERVER=TRUE",
-  "hibernate.connection.username": "sa",
-  "hibernate.connection.password": "",
-  "hibernate.show_sql": "true",
-  "hibernate.hbm2ddl.auto": "update",
+  config: {
+    "hibernate.connection.driver_class": "org.h2.Driver",
+    "hibernate.connection.url": "jdbc:h2:db/test;AUTO_SERVER=TRUE",
+    "hibernate.connection.username": "sa",
+    "hibernate.connection.password": "",
+    "hibernate.show_sql": "true",
+    "hibernate.hbm2ddl.auto": "update",
+  },
+  resources: ['mappings.hbm.xml']
 });
 ```
