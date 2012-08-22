@@ -17,7 +17,7 @@ Inspired by [ringo-hibernate](https://github.com/robi42/ringo-hibernate) package
 ```javascript
 load('lodash.js');
 
-var ORM = require('orm'),
+var ORM = require('orm').ORM,
 orm = new ORM({
   // Hibernate configuration options
   config: {
