@@ -1,8 +1,5 @@
 load('lodash.js');
-var utils = require('utils'),
-print = function (val) {
-  vertx.logger.info(JSON.stringify(val));
-};
+var utils = require('utils');
 
 function getCriteria(root, path, filter, entityName) {
   var m, criteria = root.createCriteria(path),
@@ -14,8 +11,6 @@ function getCriteria(root, path, filter, entityName) {
   _.each((filter || {}), function (f, k) {
     if (k.match(/^(eq|ne|lt|le|gt|ge|like)$/)) {
       _.each((f || {}), function (val, prop) {
-        print(M);
-        print(prop);
         criteria.add( R[k](prop, getProperty(M[prop].type, val)) );
       });
       return;
@@ -42,7 +37,6 @@ function getProperty(typeName, val) {
 
     if (_.isNull(val) || _.isUndefined(val)) return null;
     var nType = typeName.substr(0,1).toUpperCase() + typeName.substr(1).toLowerCase();
-    print({value: val, type: nType});
     return java.lang[nType]( val.toString() );
   }
 
