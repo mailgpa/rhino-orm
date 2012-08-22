@@ -271,9 +271,9 @@ function sessionWrapper(func) {
 // resolving given data into object/array acceptable by Hibernate
 function entityWrapper(entityName, _data, func) {
   var t = this,
-  data = getEntity(entityName, _data);
-  return t.sessionWrapper(function (session) {
-    return func.call(t, session, data);
+  data = getEntity.call(t, entityName, _data);
+  return sessionWrapper.call(t, function (session) {
+    return func.call(t, session, entityName, data);
   });
 }
 
