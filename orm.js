@@ -1,11 +1,11 @@
-load('lodash.js');
+load('underscore.js');
+
 var utils = require('utils');
 
 function getCriteria(root, path, filter, entityName) {
   var m, criteria = root.createCriteria(path),
-  t = this, M = t.getMeta(entityName);
-
-  var R = org.hibernate.criterion.Restrictions,
+  t = this, M = t.getMeta(entityName),
+  R = org.hibernate.criterion.Restrictions,
   O = org.hibernate.criterion.Order;
 
   _.each((filter || {}), function (f, k) {
