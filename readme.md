@@ -1,14 +1,20 @@
 This is the JavaScript wrapper for the popular Java ORM library [Hibernate](http://hibernate.org/) to be used in [Rhino](https://developer.mozilla.org/en-US/docs/Rhino) scripts.
 
+Inspired by [ringo-hibernate](https://github.com/robi42/ringo-hibernate) package for [RingoJS](http://ringojs.org/)
+
 ##Requirements
 
-* [Lo-Dash](http://lodash.com/) - *"A drop-in replacement for Underscore.js, from the devs behind jsPerf.com"*
+* [Lo-Dash](http://lodash.com/) - *"A drop-in replacement for [Underscore.js] , from the devs behind jsPerf.com"*
+* or [Underscore.js](http://underscorejs.org/) - *"A utility-belt library for JavaScript that provides a lot of the functional programming support"*
+
 
 ##Examples
 
 ###Initializing ORM object:
 
 ```javascript
+load('lodash.js');
+
 var ORM = require('orm'),
 orm = new ORM({
   config: {
@@ -22,6 +28,10 @@ orm = new ORM({
   resources: ['mappings.hbm.xml']
 });
 ```
+
+##To-Do
+
+* Tests!
 
 ##License and Contact
 
