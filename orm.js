@@ -1,50 +1,37 @@
-load('contrib/lodash/lodash.js');
+/*
+ * JS Wrapper for Hibernate
+ */
 
 function deflt(v, d) {
   return (_.isNull(v) || _.isUndefined(v)) ? d : v;
 }
 
-function getCriteria(root, path, filter, entityName) {
-  var m, criteria = root.createCriteria(path),
-  t = this, M = t.getMeta(entityName),
-  R = org.hibernate.criterion.Restrictions,
-  O = org.hibernate.criterion.Order;
+function init(config) {
+  var t = this;
 
-  _.each((filter || {}), function (f, k) {
-    if (k.match(/^(eq|ne|lt|le|gt|ge|like)$/)) {
-      _.each((f || {}), function (val, prop) {
-        criteria.add( R[k](prop, getProperty(M[prop].type, val)) );
-      });
-      return;
-    }
-    if (k.match(/^in:(.*)$/)) {
-      var m = k.match(/^in:(.*)$/),
-      type = M[m[1]].entity;
-      getCriteria(criteria, m[1], filter[key], type, mappings);
-      return;
-    }
-    if (key.match(/^(asc|desc)$/)) {
-      _.each(([]).concat(filter[key]), function (prop) {
-        criteria.addOrder( O[key](prop) );
-      });
-      return;
-    }
-  });
-
-  return criteria;
-}
-
-function getProperty(typeName, val) {
-  if (deflt(typeName, '').match(/^(long|short|integer|float|double|string|boolean|byte)$/)) {
-
-    if (_.isNull(val) || _.isUndefined(val)) return null;
-    var nType = typeName.substr(0,1).toUpperCase() + typeName.substr(1).toLowerCase();
-    return java.lang[nType]( val.toString() );
+  try {
+    var c = t.configuration = new org.hibernate.cfg.Configuration();
+    _.each(config.config, function(v, k) {
+      c.setProperty(k, v);
+    });
+    _.each(config.resources, function(res) {
+      c.addResource(res);
+    });
+    t.sessionFactory = c.buildSessionFactory();
+  } catch (error) {
+    throw error;
   }
 
-  return val;
+  return t;
 }
 
+function getSession() {
+  var t = this;
+  if (!t.sessionFactory || t.sessionFactory.isClosed()) { t.init(t.config); }
+  return t.sessionFactory.openSession();
+}
+
+// Prepare simple metadata definition for the given entity
 function getMappings(entityName, session, mappings, configuration) {
   if (mappings[entityName]) return mappings[entityName];
 
@@ -102,31 +89,99 @@ function getMappings(entityName, session, mappings, configuration) {
   return result;
 }
 
-function getEntity(entityName, obj) {
-  if (!obj) return {};
+// Get metadata by entity name
+function getMeta(entityName) {
+  var t = this;
+  t.mappings = t.mappings || {};
 
-  var t = this,
-  r = {}, M = t.getMeta(entityName);
+  // Return from cache
+  if (t.mappings[entityName]) return t.mappings[entityName];
 
-  _.each(M, function (v, p) {
-    if (v.type == 'to-many') {
-      // Collection
-      r[p] = r[p] || [];
-      _.each(([]).concat(obj[p]), function (item) {
-        r[p].push(t.getEntity(v.entity, item));
+  // Resolve via opened session
+  if (t.session && t.session.isOpen()) return getMappings.call(t, entityName, t.session, t.mappings, t.configuration);
+
+  // Resolve via session mappings
+  return sessionWrapper.call(t, function (session) {
+    return getMappings.call(t, entityName, session, t.mappings, t.configuration);
+  });
+}
+
+// Get Hibernate Criteria object by it's JS representation
+function getCriteria(root, path, filter, entityName) {
+  var m, criteria = root.createCriteria(path),
+  t = this, M = getMeta.call(t, entityName),
+  R = org.hibernate.criterion.Restrictions,
+  O = org.hibernate.criterion.Order;
+
+  _.each((filter || {}), function (f, k) {
+    if (k.match(/^(eq|ne|lt|le|gt|ge|like)$/)) {
+      _.each((f || {}), function (val, prop) {
+        criteria.add( R[k](prop, getProperty.call(t, M[prop].type, val)) );
       });
-    } else if (v.type == 'to-one') {
-      // Single association
-      r[p] = t.getEntity(v.entity, obj[p]);
-    } else {
-      // Scalar property
-      r[p] = getProperty(v.type, obj[p]);
+      return;
+    }
+    if (k.match(/^in:(.*)$/)) {
+      var m = k.match(/^in:(.*)$/),
+      type = M[m[1]].entity;
+      getCriteria.call(t, criteria, m[1], filter[key], type, mappings);
+      return;
+    }
+    if (key.match(/^(asc|desc)$/)) {
+      _.each(([]).concat(filter[key]), function (prop) {
+        criteria.addOrder( O[key](prop) );
+      });
+      return;
     }
   });
 
-  return r;
+  return criteria;
 }
 
+// Convert JS value to Java type
+function getProperty(typeName, val) {
+  if (deflt(typeName, '').match(/^(long|short|integer|float|double|string|boolean|byte)$/)) {
+
+    if (_.isNull(val) || _.isUndefined(val)) return null;
+    var nType = typeName.substr(0,1).toUpperCase() + typeName.substr(1).toLowerCase();
+    return java.lang[nType]( val.toString() );
+  }
+
+  return val;
+}
+
+// "Convert" plain JS object to Hibernate data-map object
+function getEntity(entityName, data) {
+  if (!data) return {};
+
+  var t = this,
+  r = [], M = t.getMeta(entityName);
+
+  _.each(([]).concat(data), function(obj) {
+    var rItem = {};
+
+    _.each(M, function (v, p) {
+      if (v.type == 'to-many') {
+        // Collection
+        rItem[p] = rItem[p] || [];
+        _.each(([]).concat(obj[p]), function (item) {
+          rItem[p].push(t.getEntity(v.entity, item));
+        });
+      } else if (v.type == 'to-one') {
+        // Single association
+        rItem[p] = t.getEntity(v.entity, obj[p]);
+      } else {
+        // Scalar property
+        rItem[p] = getProperty(v.type, obj[p]);
+      }
+    });
+
+    r.push(rItem);
+  });
+
+  return _.isArray(data) ? r : r[0];
+}
+
+// Java-to-JS wrapper mostly to avoid cyclic references
 function getResult(obj, _stack) {
   var result,
   stack = _.clone(deflt(_stack, {})),
@@ -174,53 +229,14 @@ function getResult(obj, _stack) {
   return obj;
 }
 
-function init(config) {
-  var t = this;
-
-  try {
-    var c = t.configuration = new org.hibernate.cfg.Configuration();
-    _.each(config.config, function(v, k) {
-      c.setProperty(k, v);
-    });
-    _.each(config.resources, function(res) {
-      c.addResource(res);
-    });
-    t.sessionFactory = c.buildSessionFactory();
-  } catch (error) {
-    throw error;
-  }
-}
-
-function getSession() {
-  var t = this;
-  if (!t.sessionFactory || t.sessionFactory.isClosed()) { t.init(t.config); }
-  return t.sessionFactory.openSession();
-}
-
-function sessionWrapper(func) {
-  var t = this;
-  var session, result;
-
-  try {
-    t.session = session = t.getSession();
-    result = transactionWrapper(session, function (session, tx) {
-      return func(session, tx);
-    });
-  } catch (error) {
-    throw error;
-  } finally {
-    if (session && session.close) session.close();
-  }
-
-  return result;
-}
-
+// Wrap a function call into a Hibernate transaction
 function transactionWrapper(session, func) {
-  var tx, result;
+  var t = this,
+  tx, result;
 
   try {
     tx = session.beginTransaction();
-    result = func(session, tx);
+    result = func.call(t, session, tx);
     session.flush();
     tx.commit();
   } catch (error) {
@@ -233,20 +249,54 @@ function transactionWrapper(session, func) {
   return result;
 }
 
+// Wrap a function call into a Hibernate session/transaction
+function sessionWrapper(func) {
+  var t = this, session, result;
+
+  try {
+    t.session = session = getSession.call(t);
+    result = transactionWrapper.call(t, session, function (session, tx) {
+      return getResult.call(t, func.call(t, session, tx));
+    });
+  } catch (error) {
+    throw error;
+  } finally {
+    if (session && session.close) session.close();
+  }
+
+  return result;
+}
+
+// Wrap a function call into a Hibernate session/transaction,
+// resolving given data into object/array acceptable by Hibernate
+function entityWrapper(entityName, _data, func) {
+  var t = this,
+  data = getEntity(entityName, _data);
+  return t.sessionWrapper(function (session) {
+    return func.call(t, session, data);
+  });
+}
+
+// Wrap a function call into a Hibernate session/transaction,
+// resolving given data into a Hibernate Criteria object
+function criteriaWrapper(entityName, filter, session, func) {
+  var t = this;
+  return func.call(t, t.getCriteria(session, entityName, filter, entityName));
+}
+
+// Helpers
+
+// Make a Hibernate Criteria query by given entity name & filter
 function criteriaQuery(entityName, filter) {
   var t = this;
-  return t.sessionWrapper(function (session) {
-    return t.criteriaWrapper(entityName, filter, session, function (criteria) {
-      return t.getResult(criteria.list());
+  return sessionWrapper.call(t, function (session) {
+    return criteriaWrapper.call(t, entityName, filter, session, function (criteria) {
+      return criteria.list();
     });
   });
 }
 
-function criteriaWrapper(entityName, filter, session, func) {
-  var t = this;
-  return func(t.getCriteria(session, entityName, filter, entityName));
-}
-
+// Delete Hibernate object by given entity name & filter
 function criteriaDelete(entityName, filter) {
   var t = this;
   return t.sessionWrapper(function (session) {
@@ -259,30 +309,31 @@ function criteriaDelete(entityName, filter) {
   });
 }
 
-function ORM(config) {
-  this.init(config);
-}
-
-ORM.prototype = {
-  init: init,
-  sessionWrapper: sessionWrapper,
-  criteriaWrapper: criteriaWrapper,
-  criteriaQuery: criteriaQuery,
-  criteriaDelete: criteriaDelete,
-  getEntity: getEntity,
-  getResult: getResult,
-  getSession: getSession,
-  getCriteria: getCriteria,
-  getMeta: function (entityName) {
-    var t = this;
-    t.mappings = t.mappings || {};
-
-    if (t.session && t.session.isOpen()) return getMappings(entityName, t.session, t.mappings, t.configuration);
-
-    return t.sessionWrapper(function (session) {
-      return getMappings(entityName, session, t.mappings, t.configuration);
-    });
-  }
+// Prepare new ORM object
+exports.ORM = function(config) {
+  init.call(this, config);
 };
 
-exports.ORM = ORM;
+// Expose methods
+exports.ORM.prototype = {
+  // Service methods
+  init            : init,
+  getSession      : getSession,
+
+  // Object wrappers
+  getEntity       : getEntity,
+  getResult       : getResult,
+  getCriteria     : getCriteria,
+  getMeta         : getMeta,
+
+  // Functional wrappers
+  sessionWrapper  : sessionWrapper,
+  entityWrapper   : entityWrapper,
+  criteriaWrapper : criteriaWrapper,
+
+  // Helpers
+  criteriaQuery   : criteriaQuery,
+  criteriaDelete  : criteriaDelete
+};
+
+module.id = "orm";
