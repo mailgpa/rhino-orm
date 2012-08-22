@@ -40,3 +40,5 @@ orm = new ORM({
 Pavel Goloborodko<br>
 https://github.com/mailgpa<br>
 mailgpa@gmail.com
+
+  [Underscore.js]: http://underscorejs.org/
