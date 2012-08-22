@@ -44,4 +44,5 @@ Pavel Goloborodko<br>
 https://github.com/mailgpa<br>
 mailgpa@gmail.com
 
+  [Hibernate]: http://hibernate.org/
   [Underscore.js]: http://underscorejs.org/
