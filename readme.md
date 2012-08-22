@@ -32,6 +32,13 @@ orm = new ORM({
   resources: ['mappings.hbm.xml']
 });
 ```
+###Persisting object:
+
+```javascript
+var result = orm.entityWrapper('City', {'name': 'rost', 'area': 'tost'}, function (session, entity, data) {
+  return session.merge(entity, data);
+});
+```
 
 ##To-Do
 
