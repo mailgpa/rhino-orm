@@ -1,11 +1,13 @@
-load('lodash.js');
-var utils = require('utils');
+load('underscore.js');
+
+function deflt(v, d) {
+  return (_.isNull(v) || _.isUndefined(v)) ? d : v;
+}
 
 function getCriteria(root, path, filter, entityName) {
   var m, criteria = root.createCriteria(path),
-  t = this, M = t.getMeta(entityName);
-
-  var R = org.hibernate.criterion.Restrictions,
+  t = this, M = t.getMeta(entityName),
+  R = org.hibernate.criterion.Restrictions,
   O = org.hibernate.criterion.Order;
 
   _.each((filter || {}), function (f, k) {
@@ -33,7 +35,7 @@ function getCriteria(root, path, filter, entityName) {
 }
 
 function getProperty(typeName, val) {
-  if (utils.deflt(typeName, '').match(/^(long|short|integer|float|double|string|boolean|byte)$/)) {
+  if (deflt(typeName, '').match(/^(long|short|integer|float|double|string|boolean|byte)$/)) {
 
     if (_.isNull(val) || _.isUndefined(val)) return null;
     var nType = typeName.substr(0,1).toUpperCase() + typeName.substr(1).toLowerCase();
@@ -127,7 +129,7 @@ function getEntity(entityName, obj) {
 
 function getResult(obj, _stack) {
   var result,
-  stack = _.clone(utils.deflt(_stack, {})),
+  stack = _.clone(deflt(_stack, {})),
   t = this;
 
   if (obj instanceof java.util.Collection) {
