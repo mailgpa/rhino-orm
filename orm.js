@@ -3,18 +3,45 @@
  */
 
 function deflt(v, d) {
-  return (_.isNull(v) || _.isUndefined(v)) ? d : v;
+  return (v == null) ? d : v;
 }
+
+// Ideas stolen from Underscore.js -->
+
+function isArray(obj) {
+  if (obj.length === +obj.length) return true;
+}
+
+function each(obj, iterator, context) {
+  if (isArray(obj)) {
+    obj.forEach(iterator, context);
+  } else {
+    for (var key in obj) {
+      if (obj.hasOwnProperty(key) && iterator.call(context, obj[key], key, obj) === {}) return;
+    }
+  }
+}
+
+function extend(obj) {
+  each(Array.prototype.slice.call(arguments, 1), function(source) {
+    for (var prop in source) {
+      obj[prop] = source[prop];
+    }
+  });
+  return obj;
+}
+
+// <--
 
 function init(config) {
   var t = this;
 
   try {
     var c = t.configuration = new org.hibernate.cfg.Configuration();
-    _.each(config.config, function(v, k) {
+    each(config.config, function(v, k) {
       c.setProperty(k, v);
     });
-    _.each(config.resources, function(res) {
+    each(config.resources, function(res) {
       c.addResource(res);
     });
     t.sessionFactory = c.buildSessionFactory();
@@ -79,7 +106,7 @@ function getMappings(entityName, session, mappings, configuration) {
       result[p].type = ptname;
       if (configuration) {
         pcol = pcoliterator.next();
-        result[p].defval = pcol.getDefaultValue();
+        result[p].defval = (pcol.getDefaultValue() || '').toString().replace(/^["']*(.*?)['"]*$/, "$1");
         result[p]['not-null'] = !(pcol.isNullable());
       }
     }
@@ -113,9 +140,9 @@ function getCriteria(root, path, filter, entityName) {
   R = org.hibernate.criterion.Restrictions,
   O = org.hibernate.criterion.Order;
 
-  _.each((filter || {}), function (f, k) {
+  each((filter || {}), function (f, k) {
     if (k.match(/^(eq|ne|lt|le|gt|ge|like)$/)) {
-      _.each((f || {}), function (val, prop) {
+      each((f || {}), function (val, prop) {
         criteria.add( R[k](prop, getProperty.call(t, M[prop].type, val)) );
       });
       return;
@@ -127,7 +154,7 @@ function getCriteria(root, path, filter, entityName) {
       return;
     }
     if (key.match(/^(asc|desc)$/)) {
-      _.each(([]).concat(filter[key]), function (prop) {
+      each(([]).concat(filter[key]), function (prop) {
         criteria.addOrder( O[key](prop) );
       });
       return;
@@ -141,7 +168,7 @@ function getCriteria(root, path, filter, entityName) {
 function getProperty(typeName, val) {
   if (deflt(typeName, '').match(/^(long|short|integer|float|double|string|boolean|byte)$/)) {
 
-    if (_.isNull(val) || _.isUndefined(val)) return null;
+  if (val == null) return null;
     var nType = typeName.substr(0,1).toUpperCase() + typeName.substr(1).toLowerCase();
     return java.lang[nType]( val.toString() );
   }
@@ -154,37 +181,38 @@ function getEntity(entityName, data) {
   if (!data) return {};
 
   var t = this,
-  r = [], M = t.getMeta(entityName);
+  r = [], M = getMeta.call(t, entityName);
 
-  _.each(([]).concat(data), function(obj) {
+  each(([]).concat(data), function(obj) {
     var rItem = {};
 
-    _.each(M, function (v, p) {
+    rItem['$type$'] = entityName;
+    each(M, function (v, p) {
       if (v.type == 'to-many') {
         // Collection
         rItem[p] = rItem[p] || [];
-        _.each(([]).concat(obj[p]), function (item) {
-          rItem[p].push(t.getEntity(v.entity, item));
+        each(([]).concat(obj[p]), function (item) {
+          rItem[p].push(getEntity.call(t, v.entity, item));
         });
       } else if (v.type == 'to-one') {
         // Single association
-        rItem[p] = t.getEntity(v.entity, obj[p]);
+        rItem[p] = getEntity.call(t, v.entity, obj[p]);
       } else {
         // Scalar property
-        rItem[p] = getProperty(v.type, obj[p]);
+        rItem[p] = getProperty.call(t, v.type, obj[p]);
       }
     });
 
     r.push(rItem);
   });
 
-  return _.isArray(data) ? r : r[0];
+  return isArray(data) ? r : r[0];
 }
 
 // Java-to-JS wrapper mostly to avoid cyclic references
 function getResult(obj, _stack) {
   var result,
-  stack = _.clone(deflt(_stack, {})),
+  stack = extend({}, deflt(_stack, {})),
   t = this;
 
   if (obj instanceof java.util.Collection) {
@@ -273,7 +301,7 @@ function entityWrapper(entityName, _data, func) {
   var t = this,
   data = getEntity.call(t, entityName, _data);
   return sessionWrapper.call(t, function (session) {
-    return func.call(t, session, entityName, data);
+    return func.call(t, session, data);
   });
 }
 
