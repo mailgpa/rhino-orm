@@ -5,12 +5,11 @@ Inspired by [ringo-hibernate](https://github.com/robi42/ringo-hibernate) package
 ##Requirements
 
 * [Rhino] - *"Rhino is an open-source implementation of JavaScript written entirely in Java"*
-  * or [vert.x] - *"Effortless asynchronous application development for the modern web and enterprise"*
-  * or [RingoJS] - *"Ringo is a CommonJS-based JavaScript runtime written in Java and based on the Mozilla Rhino JavaScript engine."*
- 
+* *or* [vert.x] - *"Effortless asynchronous application development for the modern web and enterprise"*
+* *or* [RingoJS] - *"Ringo is a CommonJS-based JavaScript runtime written in Java and based on the Mozilla Rhino JavaScript engine."*
 * [Hibernate] in CLASSPATH
 * [Lo-Dash](http://lodash.com/) - *"A drop-in replacement for [Underscore.js] , from the devs behind [jsPerf.com](http://jsPerf.com/)"*
-  * or [Underscore.js](http://underscorejs.org/) - *"A utility-belt library for JavaScript that provides a lot of the functional programming support"*
+* or [Underscore.js](http://underscorejs.org/) - *"A utility-belt library for JavaScript that provides a lot of the functional programming support"*
 
 ##Examples
 
