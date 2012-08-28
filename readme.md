@@ -9,7 +9,7 @@ Inspired by [ringo-hibernate](https://github.com/robi42/ringo-hibernate) package
 * *or* [RingoJS] - *"Ringo is a CommonJS-based JavaScript runtime written in Java and based on the Mozilla Rhino JavaScript engine."*
 * [Hibernate] in CLASSPATH
 * [Lo-Dash](http://lodash.com/) - *"A drop-in replacement for [Underscore.js] , from the devs behind [jsPerf.com](http://jsPerf.com/)"*
-* or [Underscore.js](http://underscorejs.org/) - *"A utility-belt library for JavaScript that provides a lot of the functional programming support"*
+* *or* [Underscore.js](http://underscorejs.org/) - *"A utility-belt library for JavaScript that provides a lot of the functional programming support"*
 
 ##Examples
 
