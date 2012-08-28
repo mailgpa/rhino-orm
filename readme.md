@@ -36,8 +36,8 @@ orm = new ORM({
 ###Persisting object:
 
 ```javascript
-var result = orm.entityWrapper('City', {'name': 'Lipetsk', 'area': 'Lipetskaya obl.'}, function (session, entity, data) {
-  return session.merge(entity, data);
+var result = orm.entityWrapper('City', {'name': 'Lipetsk', 'area': 'Lipetskaya obl.'}, function (session, data) {
+  return session.merge(data);
 });
 ```
 
