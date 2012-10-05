@@ -13,20 +13,20 @@ function isArray(obj) {
 }
 
 function each(obj, iterator, context) {
-  if (isArray(obj)) {
+  if (isArray(obj) && obj.forEach) {
     obj.forEach(iterator, context);
-  } else {
+  } else if (typeof obj === 'object') {
     for (var key in obj) {
       if (obj.hasOwnProperty(key) && iterator.call(context, obj[key], key, obj) === {}) return;
     }
+  } else {
+    iterator.call(context, obj, undefined, obj);
   }
 }
 
 function extend(obj) {
   each(Array.prototype.slice.call(arguments, 1), function(source) {
-    for (var prop in source) {
-      obj[prop] = source[prop];
-    }
+    for (var prop in source) { obj[prop] = source[prop]; }
   });
   return obj;
 }
@@ -52,73 +52,71 @@ function init(config) {
   return t;
 }
 
-function getSession() {
+function getSession(interceptor) {
   var t = this;
   if (!t.sessionFactory || t.sessionFactory.isClosed()) { t.init(t.config); }
-  return t.sessionFactory.openSession();
+  return interceptor ? t.sessionFactory.withOptions().interceptor(interceptor).openSession() : t.sessionFactory.openSession();
 }
 
 // Prepare simple metadata definition for the given entity
 function getMappings(entityName, session, mappings, configuration) {
   if (mappings[entityName]) return mappings[entityName];
 
-  var result = {},
-  cmd = session.getSessionFactory().getClassMetadata(entityName),
-  iterator = java.util.Arrays.asList(cmd.getPropertyNames()).iterator(),
-  idName = cmd.getIdentifierPropertyName(), cm;
+  var result = {};
 
-  if (configuration) cm = configuration.getClassMapping(entityName);
+  var classMetaData = session.getSessionFactory().getClassMetadata(entityName),
+      classMappings = configuration.getClassMapping(entityName);
 
+  var idName = classMetaData ? classMetaData.getIdentifierPropertyName() : null;
   if (idName) {
-    result[idName] = result[idName] || {};
-    result[idName].id = true;
-    result[idName].type = cmd.getIdentifierType().getName();
+    result[idName] = result[idName] || {
+      'id'   : true,
+      'type' : classMetaData.getIdentifierType().getName()
+    };
   }
 
+  var iterator = java.util.Arrays.asList(classMetaData.getPropertyNames()).iterator();
+
+  var property, pType, pTypeName, resProp, pCol;
   while (iterator.hasNext()) {
-    var p = iterator.next(),
-    ptype = cmd.getPropertyType(p),
-    ptname = ptype.getName(),
-    pcoliterator = cm.getProperty(p).getColumnIterator(),
-    pcol;
+    property  = iterator.next();
+    pType     = classMetaData.getPropertyType(property);
 
-    result[p] = result[p] || {};
+    resProp = (result[property] = result[property] || {});
 
-    if (ptype.isAssociationType()) {
+    if (pType.isAssociationType()) {
       // Association
-      pcol = pcoliterator.next();
-      result[p]['not-null'] = !(pcol.isNullable());
+      pTypeName = pType.getAssociatedEntityName(session.getSessionFactory());
 
-      if (ptype.isCollectionType()) {
-        result[p].type = 'to-many';
-        result[p].entity = ptname;
-      } else {
-        result[p].type = 'to-one';
-        result[p].entity = ptname;
-      }
-      if (ptype.getForeignKeyDirection().equals(org.hibernate.type.ForeignKeyDirection.FOREIGN_KEY_TO_PARENT)) {
-        result[p].direction = 'to-parent';
-      } else if (ptype.getForeignKeyDirection().equals(org.hibernate.type.ForeignKeyDirection.FOREIGN_KEY_FROM_PARENT)) {
-        result[p].direction = 'from-parent';
+      resProp.type   = pType.isCollectionType() ? 'to-many' : 'to-one';
+      resProp.entity = pTypeName;
+
+      // Association "direction"
+      if (pType.getForeignKeyDirection().equals(org.hibernate.type.ForeignKeyDirection.FOREIGN_KEY_TO_PARENT)) {
+        resProp.direction = 'to-parent';
+      } else if (pType.getForeignKeyDirection().equals(org.hibernate.type.ForeignKeyDirection.FOREIGN_KEY_FROM_PARENT)) {
+        resProp.direction = 'from-parent';
       }
     } else {
       // Scalar property
-      result[p].type = ptname;
-      if (configuration) {
-        pcol = pcoliterator.next();
-        result[p].defval = (pcol.getDefaultValue() || '').toString().replace(/^["']*(.*?)['"]*$/, "$1");
-        result[p]['not-null'] = !(pcol.isNullable());
-      }
+      pCol = classMappings.getProperty(property).getColumnIterator().next();
+      pTypeName = pType.getName();
+
+      resProp['not-null'] = !(pCol.isNullable());
+
+      resProp.type   = pTypeName;
+      resProp.defval = String((pCol.getDefaultValue() || '').toString()).replace(/^["']*(.*?)['"]*$/, "$1");
     }
   }
 
-  mappings[entityName] = result;
-  return result;
+ return mappings[entityName] = result;
 }
 
 // Get metadata by entity name
 function getMeta(entityName) {
   var t = this;
+
+  // Mappings cache
   t.mappings = t.mappings || {};
 
   // Return from cache
@@ -133,9 +131,21 @@ function getMeta(entityName) {
   });
 }
 
+// Convert JS value to Java type
+function getProperty(typeName, val) {
+  if (deflt(typeName, '').match(/^(long|short|integer|float|double|string|boolean|byte)$/)) {
+    if (val == null) { return null; }
+
+    var nType = typeName.substr(0,1).toUpperCase() + typeName.substr(1).toLowerCase();
+    return java.lang[nType]( val.toString() );
+  }
+
+  return val;
+}
+
 // Get Hibernate Criteria object by it's JS representation
 function getCriteria(root, path, filter, entityName) {
-  var m, criteria = root.createCriteria(path),
+  var criteria = root.createCriteria(path),
   t = this, M = getMeta.call(t, entityName),
   R = org.hibernate.criterion.Restrictions,
   O = org.hibernate.criterion.Order;
@@ -150,12 +160,12 @@ function getCriteria(root, path, filter, entityName) {
     if (k.match(/^in:(.*)$/)) {
       var m = k.match(/^in:(.*)$/),
       type = M[m[1]].entity;
-      getCriteria.call(t, criteria, m[1], filter[key], type, mappings);
+      getCriteria.call(t, criteria, m[1], filter[k], type);
       return;
     }
-    if (key.match(/^(asc|desc)$/)) {
-      each(([]).concat(filter[key]), function (prop) {
-        criteria.addOrder( O[key](prop) );
+    if (k.match(/^(asc|desc)$/)) {
+      each(([]).concat(filter[k]), function (prop) {
+        criteria.addOrder( O[k](prop) );
       });
       return;
     }
@@ -164,97 +174,97 @@ function getCriteria(root, path, filter, entityName) {
   return criteria;
 }
 
-// Convert JS value to Java type
-function getProperty(typeName, val) {
-  if (deflt(typeName, '').match(/^(long|short|integer|float|double|string|boolean|byte)$/)) {
-
-  if (val == null) return null;
-    var nType = typeName.substr(0,1).toUpperCase() + typeName.substr(1).toLowerCase();
-    return java.lang[nType]( val.toString() );
-  }
-
-  return val;
-}
-
 // "Convert" plain JS object to Hibernate data-map object
-function getEntity(entityName, data) {
-  if (!data) return {};
+function getEntity(entityName, data, processor) {
+  if (data == null) return;
 
-  var t = this,
-  r = [], M = getMeta.call(t, entityName);
+  var t        = this,
+      result   = [],
+      metaData = getMeta.call(t, entityName);
 
   each(([]).concat(data), function(obj) {
-    var rItem = {};
+    var rItem = {}, res;
 
-    rItem['$type$'] = entityName;
-    each(M, function (v, p) {
-      if (v.type == 'to-many') {
+    each(metaData, function (pType, pName) {
+     if (obj[pName] == null) {
+       rItem[pName] = obj[pName];
+     } else if (pType.type == 'to-many') {
         // Collection
-        rItem[p] = rItem[p] || [];
-        each(([]).concat(obj[p]), function (item) {
-          rItem[p].push(getEntity.call(t, v.entity, item));
+        rItem[pName] = rItem[pName] || [];
+
+        each(([]).concat(obj[pName]), function (item) {
+          res = getEntity.call(t, pType.entity, item, processor);
+          if (res != null) rItem[pName].push( res );
         });
-      } else if (v.type == 'to-one') {
+      } else if (pType.type == 'to-one') {
         // Single association
-        rItem[p] = getEntity.call(t, v.entity, obj[p]);
-      } else {
-        // Scalar property
-        rItem[p] = getProperty.call(t, v.type, obj[p]);
+       rItem[pName] = getEntity.call(t, pType.entity, obj[pName], processor);
+     } else {
+       // Scalar property
+       res = getProperty.call(t, pType.type, obj[pName]);
+       if (res != null) rItem[pName] = processor ? processor.call(t, res) : res;
       }
     });
 
-    r.push(rItem);
+    rItem.$type$ = entityName;
+
+    res = processor ? processor.call(t, rItem) : rItem;
+    if (res != null) result.push( res );
   });
 
-  return isArray(data) ? r : r[0];
+  return result.length > 1 ? result : result[0];
 }
 
 // Java-to-JS wrapper mostly to avoid cyclic references
-function getResult(obj, _stack) {
-  var result,
-  stack = extend({}, deflt(_stack, {})),
-  t = this;
+function getResult(obj, _stack, processor) {
+  var stack = extend({}, deflt(_stack, {})),
+      t     = this;
 
   if (obj instanceof java.util.Collection) {
-    return function(o) {
-      var result = [],
-      iterator = o.iterator();
+    return (function(o) {
+      var result   = [],
+          iterator = o.iterator(),
+          res;
 
       while (iterator.hasNext()) {
-        result.push(getResult.call(t, iterator.next(), stack));
+        res = getResult.call(t, iterator.next(), stack, processor);
+        if (res != null) result.push( res );
       }
 
-      return result;
-    }(obj);
+      return processor ? processor.call(t, result) : result;
+    })(obj);
   } else if (obj instanceof java.util.Map) {
-    return function(o) {
+    return (function(o) {
       var result = {},
-      type, M;
+          type, M;
 
       if (o.containsKey('$type$')) {
-        type = o.get('$type$');
-        M = t.getMeta(type);
+        type        = o.get('$type$');
+        M           = t.getMeta(type);
         stack[type] = 1;
       }
 
-      var iterator = o.keySet().iterator();
+      var iterator = o.keySet().iterator(),
+          prop;
 
       while (iterator.hasNext()) {
-        var prop = iterator.next();
+        prop = iterator.next();
         if (prop != '$type$') {
-          if (M[prop] && M[prop].type.match(/^to-(one|to-many)$/)) {
-            if (stack[M[prop].entity] && M[prop].direction == 'to-parent') {
-              result[prop] = {};
-            } else { result[prop] = getResult.call(t, o.get(prop), stack); }
-          } else result[prop] = getResult.call(t, o.get(prop), stack);
+          if ( M[prop] && M[prop].type.match(/^to-(one|to-many)$/) && stack[M[prop].entity] && M[prop].direction == 'to-parent' ) {
+            result[prop] = {};
+          } else {
+            result[prop] = getResult.call(t, o.get(prop), stack, processor);
+          }
+        } else {
+          result[prop] = o.get(prop);
         }
       }
 
-      return result;
-    }(obj);
+      return processor ? processor.call(t, result) : result;
+    })(obj);
   }
 
-  return obj;
+  return (obj == null) ? null : ( processor ? processor.call(t, obj) : obj );
 }
 
 // Wrap a function call into a Hibernate transaction
@@ -278,13 +288,16 @@ function transactionWrapper(session, func) {
 }
 
 // Wrap a function call into a Hibernate session/transaction
-function sessionWrapper(func) {
-  var t = this, session, result;
+function sessionWrapper(func, options) {
+  options = options || {};
+
+  var t = this, session, result,
+  interceptor = options.interceptor;
 
   try {
-    t.session = session = getSession.call(t);
+    t.session = session = getSession.call(t, interceptor);
     result = transactionWrapper.call(t, session, function (session, tx) {
-      return getResult.call(t, func.call(t, session, tx));
+      return func.call(t, session, tx);
     });
   } catch (error) {
     throw error;
@@ -297,19 +310,27 @@ function sessionWrapper(func) {
 
 // Wrap a function call into a Hibernate session/transaction,
 // resolving given data into object/array acceptable by Hibernate
-function entityWrapper(entityName, _data, func) {
-  var t = this,
-  data = getEntity.call(t, entityName, _data);
-  return sessionWrapper.call(t, function (session) {
-    return func.call(t, session, data);
-  });
+function entityWrapper(entityName, data, func, processor) {
+  var t = this;
+
+  return func.call(t, getEntity.call(t, entityName, data, processor));
 }
+
+// Wrap a function call into a Hibernate session/transaction,
+// converting result from Java to JavaScript
+function resultWrapper(func, processor) {
+  var t = this;
+
+  return getResult.call(t, func.call(t), undefined, processor);
+}
+
 
 // Wrap a function call into a Hibernate session/transaction,
 // resolving given data into a Hibernate Criteria object
 function criteriaWrapper(entityName, filter, session, func) {
   var t = this;
-  return func.call(t, t.getCriteria(session, entityName, filter, entityName));
+
+  return resultWrapper.call(t, func.call(t, t.getCriteria(session, entityName, filter, entityName)));
 }
 
 // Helpers
@@ -317,9 +338,10 @@ function criteriaWrapper(entityName, filter, session, func) {
 // Make a Hibernate Criteria query by given entity name & filter
 function criteriaQuery(entityName, filter) {
   var t = this;
+
   return sessionWrapper.call(t, function (session) {
     return criteriaWrapper.call(t, entityName, filter, session, function (criteria) {
-      return criteria.list();
+      return resultWrapper.call(t, criteria.list());
     });
   });
 }
@@ -327,13 +349,22 @@ function criteriaQuery(entityName, filter) {
 // Delete Hibernate object by given entity name & filter
 function criteriaDelete(entityName, filter) {
   var t = this;
-  return t.sessionWrapper(function (session) {
-    return t.criteriaWrapper(entityName, filter, session, function (criteria) {
+
+  return sessionWrapper.call(t, function (session) {
+    return criteriaWrapper.call(t, entityName, filter, session, function (criteria) {
       var rs = criteria.list().iterator();
       while (rs.hasNext()) {
         criteria.getSession()['delete'](entityName, rs.next());
       }
     });
+  });
+}
+
+function put(entityName, data) {
+  var t = this;
+
+  return entityWrapper.call(t, entityName, data, function (session, data) {
+    return session.merge(data);
   });
 }
 
@@ -357,11 +388,13 @@ exports.ORM.prototype = {
   // Functional wrappers
   sessionWrapper  : sessionWrapper,
   entityWrapper   : entityWrapper,
+  resultWrapper   : resultWrapper,
   criteriaWrapper : criteriaWrapper,
 
   // Helpers
   criteriaQuery   : criteriaQuery,
-  criteriaDelete  : criteriaDelete
+  criteriaDelete  : criteriaDelete,
+  put             : put
 };
 
 module.id = "orm";
