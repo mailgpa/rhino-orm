@@ -9,16 +9,16 @@ function deflt(v, d) {
 // Ideas stolen from Underscore.js -->
 
 function isArray(obj) {
-  if (obj.length === +obj.length) return true;
+  return obj.length === +obj.length && obj.forEach;
 }
 
 function each(obj, iterator, context) {
-  if (isArray(obj) && obj.forEach) {
+  if (isArray(obj)) {
     obj.forEach(iterator, context);
   } else if (typeof obj === 'object') {
-    for (var key in obj) {
-      if (obj.hasOwnProperty(key) && iterator.call(context, obj[key], key, obj) === {}) return;
-    }
+    Object.keys(obj).forEach(function (key) {
+      if (iterator.call(context, obj[key], key, obj) === {}) return;
+    });
   } else {
     iterator.call(context, obj, undefined, obj);
   }
@@ -28,6 +28,7 @@ function extend(obj) {
   each(Array.prototype.slice.call(arguments, 1), function(source) {
     for (var prop in source) { obj[prop] = source[prop]; }
   });
+
   return obj;
 }
 
@@ -38,12 +39,15 @@ function init(config) {
 
   try {
     var c = t.configuration = new org.hibernate.cfg.Configuration();
+
     each(config.config, function(v, k) {
       c.setProperty(k, v);
     });
+
     each(config.resources, function(res) {
       c.addResource(res);
     });
+
     t.sessionFactory = c.buildSessionFactory();
   } catch (error) {
     throw error;
@@ -54,7 +58,9 @@ function init(config) {
 
 function getSession(interceptor) {
   var t = this;
-  if (!t.sessionFactory || t.sessionFactory.isClosed()) { t.init(t.config); }
+
+  if (!t.sessionFactory || t.sessionFactory.isClosed()) t.init(t.config);
+
   return interceptor ? t.sessionFactory.withOptions().interceptor(interceptor).openSession() : t.sessionFactory.openSession();
 }
 
@@ -62,54 +68,44 @@ function getSession(interceptor) {
 function getMappings(entityName, session, mappings, configuration) {
   if (mappings[entityName]) return mappings[entityName];
 
-  var result = {};
+  var result        = {},
+      classMetaData = session.getSessionFactory().getClassMetadata(entityName)
 
-  var classMetaData = session.getSessionFactory().getClassMetadata(entityName),
-      classMappings = configuration.getClassMapping(entityName);
+  if (!classMetaData) return result;
 
-  var idName = classMetaData ? classMetaData.getIdentifierPropertyName() : null;
-  if (idName) {
-    result[idName] = result[idName] || {
-      'id'   : true,
-      'type' : classMetaData.getIdentifierType().getName()
-    };
-  }
+  var idName = classMetaData.getIdentifierPropertyName();
+  if (idName) result[idName] = {
+    'id'   : true,
+    'type' : classMetaData.getIdentifierType().getName()
+  };
 
-  var iterator = java.util.Arrays.asList(classMetaData.getPropertyNames()).iterator();
+  // Obtain property names, types and nullabilities
+  var props         = classMetaData.getPropertyNames(),
+      types         = classMetaData.getPropertyTypes(),
+      nullabilities = classMetaData.getPropertyNullability();
 
-  var property, pType, pTypeName, resProp, pCol;
-  while (iterator.hasNext()) {
-    property  = iterator.next();
-    pType     = classMetaData.getPropertyType(property);
+  // Iterate over properties
+  props.forEach(function (prop, index) {
+    var pType = types[index],
+        rProp = result[prop] = {};
 
-    resProp = (result[property] = result[property] || {});
+    rProp['not-null'] = !nullabilities[index];
 
     if (pType.isAssociationType()) {
-      // Association
-      pTypeName = pType.getAssociatedEntityName(session.getSessionFactory());
-
-      resProp.type   = pType.isCollectionType() ? 'to-many' : 'to-one';
-      resProp.entity = pTypeName;
-
-      // Association "direction"
-      if (pType.getForeignKeyDirection().equals(org.hibernate.type.ForeignKeyDirection.FOREIGN_KEY_TO_PARENT)) {
-        resProp.direction = 'to-parent';
-      } else if (pType.getForeignKeyDirection().equals(org.hibernate.type.ForeignKeyDirection.FOREIGN_KEY_FROM_PARENT)) {
-        resProp.direction = 'from-parent';
-      }
+      // Associations
+      rProp.type   = pType.isCollectionType() ? 'to-many' : 'to-one';
+      rProp.entity = pType.getAssociatedEntityName(session.getSessionFactory());
     } else {
-      // Scalar property
-      pCol = classMappings.getProperty(property).getColumnIterator().next();
-      pTypeName = pType.getName();
+      // Scalar
+      rProp.type  = pType.getName();
 
-      resProp['not-null'] = !(pCol.isNullable());
-
-      resProp.type   = pTypeName;
-      resProp.defval = String((pCol.getDefaultValue() || '').toString()).replace(/^["']*(.*?)['"]*$/, "$1");
+      var pCol = configuration.getClassMapping(entityName).getProperty(prop).getColumnIterator().next();
+      if ( pCol.getDefaultValue() )
+        rProp.defval = String((pCol.getDefaultValue() || '').toString()).replace(/^["']*(.*?)['"]*$/, "$1");
     }
-  }
+  });
 
- return mappings[entityName] = result;
+  return mappings[entityName] = result;
 }
 
 // Get metadata by entity name
@@ -134,7 +130,7 @@ function getMeta(entityName) {
 // Convert JS value to Java type
 function getProperty(typeName, val) {
   if (deflt(typeName, '').match(/^(long|short|integer|float|double|string|boolean|byte)$/)) {
-    if (val == null) { return null; }
+    if (val == null) return null;
 
     var nType = typeName.substr(0,1).toUpperCase() + typeName.substr(1).toLowerCase();
     return java.lang[nType]( val.toString() );
@@ -156,14 +152,12 @@ function getCriteria(root, path, filter, entityName) {
         criteria.add( R[k](prop, getProperty.call(t, M[prop].type, val)) );
       });
       return;
-    }
-    if (k.match(/^in:(.*)$/)) {
+    } else if (k.match(/^in:(.*)$/)) {
       var m = k.match(/^in:(.*)$/),
       type = M[m[1]].entity;
       getCriteria.call(t, criteria, m[1], filter[k], type);
       return;
-    }
-    if (k.match(/^(asc|desc)$/)) {
+    } else if (k.match(/^(asc|desc)$/)) {
       each(([]).concat(filter[k]), function (prop) {
         criteria.addOrder( O[k](prop) );
       });
@@ -236,12 +230,18 @@ function getResult(obj, _stack, processor) {
   } else if (obj instanceof java.util.Map) {
     return (function(o) {
       var result = {},
-          type, M;
+          type, M, id;
 
       if (o.containsKey('$type$')) {
-        type        = o.get('$type$');
-        M           = t.getMeta(type);
-        stack[type] = 1;
+        type = o.get('$type$');
+        id   = o.get('id');
+        M    = t.getMeta(type);
+
+        if ( stack[type + ':' + id] ) {
+          return processor ? processor.call(t, result) : result;
+        } else {
+          stack[type + ':' + id] = 1;
+        }
       }
 
       var iterator = o.keySet().iterator(),
@@ -250,11 +250,7 @@ function getResult(obj, _stack, processor) {
       while (iterator.hasNext()) {
         prop = iterator.next();
         if (prop != '$type$') {
-          if ( M[prop] && M[prop].type.match(/^to-(one|to-many)$/) && stack[M[prop].entity] && M[prop].direction == 'to-parent' ) {
-            result[prop] = {};
-          } else {
-            result[prop] = getResult.call(t, o.get(prop), stack, processor);
-          }
+          result[prop] = getResult.call(t, o.get(prop), stack, processor);
         } else {
           result[prop] = o.get(prop);
         }
@@ -330,10 +326,33 @@ function resultWrapper(func, processor) {
 function criteriaWrapper(entityName, filter, session, func) {
   var t = this;
 
-  return resultWrapper.call(t, func.call(t, t.getCriteria(session, entityName, filter, entityName)));
+  return func.call(t, getCriteria.call(t, session, entityName, filter, entityName));
 }
 
 // Helpers
+
+function criteriaPager(criteria, pager) {
+  var result = {},
+      P = org.hibernate.criterion.Projections;
+
+  if ( pager ) {
+    var rows = result.rows = criteria.setProjection(P.rowCount()).uniqueResult();
+
+    criteria.setProjection( null );
+    criteria.setResultTransformer( org.hibernate.Criteria.DISTINCT_ROOT_ENTITY );
+
+    var pageSize = pager.size,
+        lastPage = result.pages = Math.ceil( rows / ( pageSize || rows || 1 ) ) || 1,
+        pageCur  = result.page  = ( pager.page < 1 ) ? 1 : ( pager.page > lastPage ) ? lastPage : pager.page;
+
+    criteria.setFirstResult( pageSize ? (pageCur - 1)*pageSize : 0 );
+    if (pageSize) criteria.setMaxResults( pageSize );
+
+    // criteria.setProjection( P.distinct(P.id()) );
+  }
+
+  return result;
+}
 
 // Make a Hibernate Criteria query by given entity name & filter
 function criteriaQuery(entityName, filter) {
@@ -341,7 +360,9 @@ function criteriaQuery(entityName, filter) {
 
   return sessionWrapper.call(t, function (session) {
     return criteriaWrapper.call(t, entityName, filter, session, function (criteria) {
-      return resultWrapper.call(t, criteria.list());
+      return resultWrapper.call(t, function () {
+        return criteria.list();
+      });
     });
   });
 }
@@ -392,6 +413,7 @@ exports.ORM.prototype = {
   criteriaWrapper : criteriaWrapper,
 
   // Helpers
+  criteriaPager   : criteriaPager,
   criteriaQuery   : criteriaQuery,
   criteriaDelete  : criteriaDelete,
   put             : put
